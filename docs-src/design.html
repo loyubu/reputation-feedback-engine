@@ -1,0 +1,580 @@
+<meta charset="utf-8">
+<title>Reputation &amp; Feedback Intelligence Engine — Design Review</title>
+<style>
+  :root{
+    --ink:#14171A; --graphite:#23272E; --body:#2B3038; --muted:#5E6874;
+    --rule:#DCE0E6; --surface:#F5F6F8;
+    --ra:#1C7A4D; --rb:#A96410; --rc:#B02A21; --rd:#2F5D8C;
+    --serif:Cambria,"Bookman Old Style",Georgia,serif;
+    --sans:Calibri,"Segoe UI",Arial,sans-serif;
+    --mono:Consolas,"Courier New",monospace;
+  }
+  @page{ size:A4; margin:17mm 15mm 15mm 15mm; }
+  *{ box-sizing:border-box; }
+  body{ font-family:var(--sans); color:var(--body); font-size:10.2pt; line-height:1.5; margin:0; }
+  h1,h2,h3{ font-family:var(--serif); color:var(--ink); line-height:1.2;
+           page-break-after:avoid; break-after:avoid; }
+  h1{ font-size:25pt; margin:0 0 6px; letter-spacing:-.2px; }
+  h2{ font-size:15.5pt; margin:26px 0 9px; padding-top:9px; border-top:2px solid var(--ink); }
+  h3{ font-size:11.5pt; margin:17px 0 5px; }
+  p{ margin:0 0 9px; }
+  strong{ color:var(--ink); }
+  a{ color:var(--rd); }
+  .lede{ font-size:11pt; color:var(--muted); }
+  .sub{ font-size:9.2pt; color:var(--muted); }
+
+  /* cover */
+  .cover{ border-bottom:3px solid var(--ink); padding-bottom:14px; margin-bottom:18px; }
+  .kicker{ font-family:var(--sans); font-size:8.4pt; letter-spacing:1.6px;
+           text-transform:uppercase; color:var(--muted); margin:0 0 9px; }
+  .meta{ display:flex; gap:26px; flex-wrap:wrap; font-size:9pt; color:var(--muted); margin-top:11px; }
+  .meta b{ color:var(--ink); font-weight:600; }
+
+  /* the standing rule */
+  .rule-box{ background:var(--graphite); color:#EDEFF2; padding:13px 16px; margin:14px 0 0;
+             font-size:10.4pt; line-height:1.45; }
+  .rule-box b{ color:#fff; }
+
+  table{ break-inside:auto; border-collapse:collapse; width:100%; font-size:9.3pt; margin:9px 0 13px; }
+  th{ text-align:left; background:var(--surface); color:var(--ink); font-weight:700;
+      padding:6px 9px; border-bottom:1.5px solid var(--ink); font-size:8.6pt;
+      letter-spacing:.3px; text-transform:uppercase; }
+  td{ padding:6px 9px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  tr:last-child td{ border-bottom:1px solid var(--rule); }
+  td code{ font-family:var(--mono); font-size:8.7pt; background:var(--surface); padding:1px 4px; }
+  .num{ white-space:nowrap; }
+
+  .route-key{ font-weight:700; white-space:nowrap; }
+  .ra{ color:var(--ra); } .rb{ color:var(--rb); } .rc{ color:var(--rc); } .rd{ color:var(--rd); }
+
+  figure{ margin:14px 0 6px; page-break-inside:avoid; }
+  figure svg{ width:100%; height:auto; display:block; }
+  figcaption{ font-size:8.6pt; color:var(--muted); margin-top:7px; }
+
+  .callout{ border-left:3px solid var(--ink); padding:2px 0 2px 13px; margin:12px 0; }
+  .callout.warn{ border-left-color:var(--rc); }
+  .callout h3{ margin-top:0; }
+
+  ul{ margin:0 0 10px; padding-left:17px; }
+  li{ margin-bottom:5px; }
+
+  .pagebreak{ page-break-before:always; }
+  .avoid{ page-break-inside:avoid; }
+  .footer-note{ font-size:8.4pt; color:var(--muted); border-top:1px solid var(--rule);
+                padding-top:8px; margin-top:22px; }
+</style>
+
+<div class="cover">
+  <p class="kicker">Capstone · Design Review · Not yet approved</p>
+  <h1>Reputation &amp; Feedback Intelligence&nbsp;Engine</h1>
+  <p class="lede">How a completed visit becomes scored feedback, routed four ways, with a
+  draft reply waiting and a manager alerted when it matters.</p>
+  <div class="meta">
+    <span><b>Date</b> 22 September 2026</span>
+    <span><b>Platform</b> n8n</span>
+    <span><b>Delivery</b> Group work</span>
+    <span><b>Source</b> Capstone Project Information.txt</span>
+  </div>
+</div>
+
+<h2>Context</h2>
+<p>A multi-location car care and auto repair chain has two problems. Follow-up after a visit is
+inconsistent, so a bad review appears online before anyone internally has heard a word from that
+customer. And all feedback is handled identically — a mild grumble about a delay gets the same
+treatment as a furious complaint about a botched job.</p>
+
+<p>This system closes that loop. Every completed visit triggers a feedback request. Every reply is
+read and scored on <strong>two axes</strong> rather than sorted into two buckets. What happens next
+depends on the score <strong>and</strong> on whether this customer has complained before. Everything
+lands on one dashboard, filterable by branch.</p>
+
+<div class="rule-box">
+  <b>The standing rule.</b> Nothing is ever published publicly by the system, and nothing is ever
+  sent to a customer by the system. A human does both. The system's job is to notice, score, route,
+  and prepare — never to act on the customer's behalf.
+</div>
+
+<h2>What is settled, and what is not</h2>
+
+<table>
+  <tr><th style="width:26%">Decision</th><th>Choice</th></tr>
+  <tr><td><b>Platform</b></td><td>n8n</td></tr>
+  <tr><td><b>Audience</b></td><td>Course capstone — graded on a working end-to-end demo, not production hardening</td></tr>
+  <tr><td><b>Delivery</b></td><td>Group work, more than one person building</td></tr>
+  <tr><td><b>Hosting</b></td><td>n8n Cloud to build and demo, then export to self-hosted Docker on Oracle Cloud</td></tr>
+  <tr><td><b>Domain</b></td><td>Already owned — used for the form, the dashboard and n8n itself once migrated</td></tr>
+  <tr><td><b>Model</b></td><td>Claude (Anthropic) — <i>assumed, to confirm</i></td></tr>
+</table>
+
+<h3>Four questions for the group</h3>
+<table>
+  <tr><th style="width:30%">Question</th><th>Options</th></tr>
+  <tr><td><b>Datastore + dashboard</b></td>
+      <td>Airtable + Interface Designer · Supabase + custom dashboard · Supabase + hosted page · Sheets + Looker Studio</td></tr>
+  <tr><td><b>Request and reply channel</b></td>
+      <td>n8n Form link <i>(recommended)</i> · email out and reply in · Telegram bot · simulated webhook</td></tr>
+  <tr><td><b>Manager alert channel</b></td>
+      <td>Telegram · email · Slack · both</td></tr>
+  <tr><td><b>"Ready to post" content</b></td>
+      <td>The customer's raw words, or a lightly polished review drafted from them</td></tr>
+</table>
+
+<h2>Three things in the brief that are easy to miss</h2>
+
+<h3>There are four routes, not three</h3>
+<p>The brief's flow section lists three — positive, negative-mild, negative-severe. But point 8 adds
+a fourth: anything the system cannot confidently score is <strong>flagged for a human rather than
+guessed at</strong>. It is built here as a first-class route with its own queue, not as an error
+handler bolted on the side.</p>
+
+<h3>Scoring is two numbers, not one</h3>
+<p>"Score how positive or negative it is, <i>and</i> how severe." Those are different axes. "Fine, a
+bit slow" is negative but low severity; "you ruined my car" is negative and high severity.
+Collapsing them into a single value would be exactly the flattening the brief objects to.</p>
+
+<h3>The repeat-customer rule is an override, not an input</h3>
+<p>Point 4 says escalate "regardless of how mild this particular message reads". So history does not
+nudge the score — it <strong>bypasses the severity threshold entirely</strong>. This distinction is
+what makes the third demo case visibly different from the second rather than coincidentally
+different.</p>
+
+<h2 class="avoid">Workflow 1 — Visit complete becomes a feedback request</h2>
+
+<figure>
+<svg viewBox="0 0 1120 186" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Five sequential steps: webhook, upsert customer, create visit, send request, stamp timestamp.">
+  <defs>
+    <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#23272E"/>
+    </marker>
+  </defs>
+  <g font-family="Calibri, Segoe UI, Arial, sans-serif">
+    <!-- 1 -->
+    <rect x="1" y="26" width="200" height="112" rx="5" fill="#fff" stroke="#23272E" stroke-width="2"/>
+    <text x="16" y="49" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">TRIGGER</text>
+    <text x="16" y="71" font-size="14" font-weight="700" fill="#14171A">Visit Complete</text>
+    <text x="16" y="93" font-size="11" fill="#2B3038">Webhook · POST</text>
+    <text x="16" y="110" font-size="11" fill="#2B3038">name · email ·</text>
+    <text x="16" y="127" font-size="11" fill="#2B3038">location · service</text>
+    <!-- 2 -->
+    <rect x="231" y="26" width="200" height="112" rx="5" fill="#fff" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="246" y="49" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">STEP 2</text>
+    <text x="246" y="71" font-size="14" font-weight="700" fill="#14171A">Upsert Customer</text>
+    <text x="246" y="93" font-size="11" fill="#2B3038">Match on email →</text>
+    <text x="246" y="110" font-size="11" fill="#2B3038">stable identity. This</text>
+    <text x="246" y="127" font-size="11" fill="#2B3038">enables the repeat check.</text>
+    <!-- 3 -->
+    <rect x="461" y="26" width="200" height="112" rx="5" fill="#fff" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="476" y="49" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">STEP 3</text>
+    <text x="476" y="71" font-size="14" font-weight="700" fill="#14171A">Create Visit</text>
+    <text x="476" y="93" font-size="11" fill="#2B3038">visit_id</text>
+    <text x="476" y="110" font-size="11" fill="#2B3038">location_id</text>
+    <text x="476" y="127" font-size="11" fill="#2B3038">completed_at</text>
+    <!-- 4 -->
+    <rect x="691" y="26" width="200" height="112" rx="5" fill="#fff" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="706" y="49" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">STEP 4</text>
+    <text x="706" y="71" font-size="14" font-weight="700" fill="#14171A">Send Request</text>
+    <text x="706" y="93" font-size="11" fill="#2B3038">Link built from the</text>
+    <text x="706" y="110" font-size="11" fill="#2B3038">Config base URL —</text>
+    <text x="706" y="127" font-size="11" fill="#2B3038">never hardcoded.</text>
+    <!-- 5 -->
+    <rect x="921" y="26" width="198" height="112" rx="5" fill="#F5F6F8" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="936" y="49" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">STEP 5</text>
+    <text x="936" y="71" font-size="14" font-weight="700" fill="#14171A">Stamp sent_at</text>
+    <text x="936" y="93" font-size="11" fill="#2B3038">Dashboard can now</text>
+    <text x="936" y="110" font-size="11" fill="#2B3038">show "sent, awaiting</text>
+    <text x="936" y="127" font-size="11" fill="#2B3038">reply".</text>
+    <!-- arrows -->
+    <line x1="205" y1="82" x2="225" y2="82" stroke="#23272E" stroke-width="2" marker-end="url(#ar1)"/>
+    <line x1="435" y1="82" x2="455" y2="82" stroke="#23272E" stroke-width="2" marker-end="url(#ar1)"/>
+    <line x1="665" y1="82" x2="685" y2="82" stroke="#23272E" stroke-width="2" marker-end="url(#ar1)"/>
+    <line x1="895" y1="82" x2="915" y2="82" stroke="#23272E" stroke-width="2" marker-end="url(#ar1)"/>
+  </g>
+</svg>
+<figcaption>The webhook stands in for the shop's job management system. Deliberately simple — the
+brief asks only for a reliable trigger, and the interesting work is all downstream.</figcaption>
+</figure>
+
+<p><strong>Why the customer record comes before the visit record.</strong> The repeat-customer check
+later in the flow is only possible if the same person is recognisable across two separate visits.
+That identity has to be established here, on the way in, matched on a stable key. Get this wrong and
+route C never fires, no matter how correct the routing logic is.</p>
+
+<div class="pagebreak"></div>
+
+<h2>Workflow 2 — Reply becomes a scored, routed decision</h2>
+
+<figure>
+<svg viewBox="0 0 1020 1156" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="The scoring and routing pipeline, branching into four routes.">
+  <defs>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#23272E"/>
+    </marker>
+    <marker id="adm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5E6874"/>
+    </marker>
+  </defs>
+  <g font-family="Calibri, Segoe UI, Arial, sans-serif">
+
+    <!-- ===== SPINE ===== -->
+    <rect x="340" y="10" width="340" height="62" rx="5" fill="#23272E"/>
+    <text x="360" y="33" font-size="10" font-weight="700" fill="#9BA5B2" letter-spacing="1">TRIGGER</text>
+    <text x="360" y="54" font-size="14" font-weight="700" fill="#FFFFFF">Feedback Reply · n8n Form</text>
+    <text x="360" y="68" font-size="10.5" fill="#C6CDD6">free text · visit_id carried in the URL</text>
+
+    <rect x="340" y="100" width="340" height="62" rx="5" fill="#fff" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="360" y="124" font-size="13" font-weight="700" fill="#14171A">Load Context</text>
+    <text x="360" y="141" font-size="10.5" fill="#2B3038">visit + customer + location</text>
+    <text x="360" y="156" font-size="10.5" fill="#5E6874">dedupe — already scored? stop here</text>
+
+    <rect x="340" y="190" width="340" height="74" rx="5" fill="#F5F6F8" stroke="#23272E" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <text x="360" y="213" font-size="13" font-weight="700" fill="#14171A">Config · one Set node</text>
+    <text x="360" y="231" font-size="10.5" fill="#2B3038">severity_escalate = 4</text>
+    <text x="360" y="246" font-size="10.5" fill="#2B3038">confidence_floor = 0.6</text>
+    <text x="360" y="259" font-size="10.5" fill="#2B3038">form_base_url · history_lookback</text>
+
+    <rect x="340" y="292" width="340" height="88" rx="5" fill="#fff" stroke="#23272E" stroke-width="2.4"/>
+    <circle cx="358" cy="312" r="6" fill="#23272E"/>
+    <text x="372" y="316" font-size="10" font-weight="700" fill="#5E6874" letter-spacing="1">MODEL CALL 1</text>
+    <text x="360" y="338" font-size="13.5" font-weight="700" fill="#14171A">Score the reply</text>
+    <text x="360" y="356" font-size="10.5" fill="#2B3038">polarity −1…+1 · severity 0…5 · confidence 0…1</text>
+    <text x="360" y="371" font-size="10.5" fill="#5E6874">themes · one-line summary</text>
+
+    <path d="M360,408 L660,408 L680,437 L660,466 L360,466 L340,437 Z" fill="#fff" stroke="#23272E" stroke-width="1.6"/>
+    <text x="510" y="434" font-size="12.5" font-weight="700" fill="#14171A" text-anchor="middle">Confidence gate</text>
+    <text x="510" y="452" font-size="10.5" fill="#5E6874" text-anchor="middle">is this score trustworthy?</text>
+
+    <rect x="340" y="494" width="340" height="72" rx="5" fill="#fff" stroke="#DCE0E6" stroke-width="1.6"/>
+    <text x="360" y="518" font-size="13" font-weight="700" fill="#14171A">History Check</text>
+    <text x="360" y="536" font-size="10.5" fill="#2B3038">has this customer left negative feedback before?</text>
+    <text x="360" y="552" font-size="10.5" fill="#5E6874">a database query, not the model · excludes this visit</text>
+
+    <rect x="340" y="594" width="340" height="66" rx="5" fill="#23272E"/>
+    <text x="360" y="617" font-size="13.5" font-weight="700" fill="#FFFFFF">Decide · one Code node</text>
+    <text x="360" y="635" font-size="10.5" fill="#C6CDD6">the entire rule set in one readable place</text>
+    <text x="360" y="651" font-size="10.5" fill="#9BA5B2">outputs a single field: route</text>
+
+    <rect x="410" y="688" width="200" height="44" rx="5" fill="#fff" stroke="#23272E" stroke-width="1.6"/>
+    <text x="510" y="716" font-size="12.5" font-weight="700" fill="#14171A" text-anchor="middle">Switch on route</text>
+
+    <!-- spine arrows -->
+    <line x1="510" y1="72"  x2="510" y2="96"  stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <line x1="510" y1="162" x2="510" y2="186" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <line x1="510" y1="264" x2="510" y2="288" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <line x1="510" y1="380" x2="510" y2="404" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <line x1="510" y1="466" x2="510" y2="490" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <text x="520" y="483" font-size="10" font-weight="700" fill="#1C7A4D">scored ok</text>
+    <line x1="510" y1="566" x2="510" y2="590" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+    <line x1="510" y1="660" x2="510" y2="684" stroke="#23272E" stroke-width="2" marker-end="url(#ad)"/>
+
+    <!-- ===== BYPASS RAIL to route D ===== -->
+    <path d="M680,336 L1000,336 L1000,819 L986,819"
+          fill="none" stroke="#2F5D8C" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#ad)"/>
+    <path d="M680,437 L1000,437" fill="none" stroke="#2F5D8C" stroke-width="1.8" stroke-dasharray="5 4"/>
+    <text x="694" y="330" font-size="10" font-weight="700" fill="#2F5D8C">model failed / malformed JSON</text>
+    <text x="694" y="431" font-size="10" font-weight="700" fill="#2F5D8C">below floor · gibberish · not feedback</text>
+
+    <!-- ===== BRANCH BUS ===== -->
+    <line x1="510" y1="732" x2="510" y2="756" stroke="#23272E" stroke-width="2"/>
+    <line x1="134" y1="756" x2="866" y2="756" stroke="#23272E" stroke-width="2"/>
+    <line x1="134" y1="756" x2="134" y2="786" stroke="#1C7A4D" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="378" y1="756" x2="378" y2="786" stroke="#A96410" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="622" y1="756" x2="622" y2="786" stroke="#B02A21" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="866" y1="756" x2="866" y2="786" stroke="#2F5D8C" stroke-width="2.2" marker-end="url(#ad)"/>
+
+    <!-- ===== ROUTE A ===== -->
+    <rect x="20" y="790" width="228" height="58" rx="5" fill="#1C7A4D"/>
+    <text x="34" y="812" font-size="10.5" font-weight="700" fill="#FFFFFF" letter-spacing="1">ROUTE A</text>
+    <text x="34" y="833" font-size="13.5" font-weight="700" fill="#FFFFFF">Positive</text>
+    <rect x="20" y="868" width="228" height="62" rx="5" fill="#fff" stroke="#1C7A4D" stroke-width="1.6"/>
+    <text x="34" y="890" font-size="12" font-weight="700" fill="#14171A">Ready-to-post queue</text>
+    <text x="34" y="907" font-size="10.5" fill="#2B3038">stored for a human to open,</text>
+    <text x="34" y="922" font-size="10.5" fill="#2B3038">read and copy out</text>
+    <line x1="134" y1="848" x2="134" y2="864" stroke="#1C7A4D" stroke-width="2.2" marker-end="url(#ad)"/>
+
+    <!-- ===== ROUTE B ===== -->
+    <rect x="264" y="790" width="228" height="58" rx="5" fill="#A96410"/>
+    <text x="278" y="812" font-size="10.5" font-weight="700" fill="#FFFFFF" letter-spacing="1">ROUTE B</text>
+    <text x="278" y="833" font-size="13.5" font-weight="700" fill="#FFFFFF">Negative · mild · first time</text>
+    <rect x="264" y="868" width="228" height="62" rx="5" fill="#fff" stroke="#A96410" stroke-width="1.6"/>
+    <text x="278" y="890" font-size="12" font-weight="700" fill="#14171A">Private queue</text>
+    <text x="278" y="907" font-size="10.5" fill="#2B3038">the team handles it in</text>
+    <text x="278" y="922" font-size="10.5" fill="#2B3038">their own time</text>
+    <rect x="264" y="950" width="228" height="62" rx="5" fill="#fff" stroke="#A96410" stroke-width="2.2"/>
+    <circle cx="280" cy="968" r="5" fill="#A96410"/>
+    <text x="292" y="972" font-size="9.5" font-weight="700" fill="#5E6874" letter-spacing="1">MODEL CALL 2</text>
+    <text x="278" y="991" font-size="12" font-weight="700" fill="#14171A">Draft response</text>
+    <text x="278" y="1006" font-size="10.5" fill="#5E6874">saved · status = pending</text>
+    <line x1="378" y1="848" x2="378" y2="864" stroke="#A96410" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="378" y1="930" x2="378" y2="946" stroke="#A96410" stroke-width="2.2" marker-end="url(#ad)"/>
+
+    <!-- ===== ROUTE C ===== -->
+    <rect x="508" y="790" width="228" height="58" rx="5" fill="#B02A21"/>
+    <text x="522" y="812" font-size="10.5" font-weight="700" fill="#FFFFFF" letter-spacing="1">ROUTE C</text>
+    <text x="522" y="833" font-size="13.5" font-weight="700" fill="#FFFFFF">Negative · severe or repeat</text>
+    <rect x="508" y="868" width="228" height="62" rx="5" fill="#fff" stroke="#B02A21" stroke-width="1.6"/>
+    <text x="522" y="890" font-size="12" font-weight="700" fill="#14171A">Private queue</text>
+    <text x="522" y="907" font-size="10.5" fill="#2B3038">never pointed toward a</text>
+    <text x="522" y="922" font-size="10.5" fill="#2B3038">public review</text>
+    <rect x="508" y="950" width="228" height="62" rx="5" fill="#fff" stroke="#B02A21" stroke-width="2.2"/>
+    <circle cx="524" cy="968" r="5" fill="#B02A21"/>
+    <text x="536" y="972" font-size="9.5" font-weight="700" fill="#5E6874" letter-spacing="1">MODEL CALL 2</text>
+    <text x="522" y="991" font-size="12" font-weight="700" fill="#14171A">Draft response</text>
+    <text x="522" y="1006" font-size="10.5" fill="#5E6874">generated in parallel</text>
+    <rect x="508" y="1032" width="228" height="62" rx="5" fill="#B02A21"/>
+    <text x="522" y="1054" font-size="12.5" font-weight="700" fill="#FFFFFF">Alert a manager — now</text>
+    <text x="522" y="1071" font-size="10.5" fill="#F3D3D1">open alert logged for the</text>
+    <text x="522" y="1086" font-size="10.5" fill="#F3D3D1">dashboard to track</text>
+    <line x1="622" y1="848" x2="622" y2="864" stroke="#B02A21" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="622" y1="930" x2="622" y2="946" stroke="#B02A21" stroke-width="2.2" marker-end="url(#ad)"/>
+    <line x1="622" y1="1012" x2="622" y2="1028" stroke="#B02A21" stroke-width="2.2" marker-end="url(#ad)"/>
+
+    <!-- ===== ROUTE D ===== -->
+    <rect x="752" y="790" width="228" height="58" rx="5" fill="#2F5D8C"/>
+    <text x="766" y="812" font-size="10.5" font-weight="700" fill="#FFFFFF" letter-spacing="1">ROUTE D</text>
+    <text x="766" y="833" font-size="13.5" font-weight="700" fill="#FFFFFF">Cannot score confidently</text>
+    <rect x="752" y="868" width="228" height="62" rx="5" fill="#fff" stroke="#2F5D8C" stroke-width="1.6"/>
+    <text x="766" y="890" font-size="12" font-weight="700" fill="#14171A">Review queue</text>
+    <text x="766" y="907" font-size="10.5" fill="#2B3038">flagged for a human —</text>
+    <text x="766" y="922" font-size="10.5" fill="#2B3038">nothing guessed, nothing routed</text>
+    <line x1="866" y1="848" x2="866" y2="864" stroke="#2F5D8C" stroke-width="2.2" marker-end="url(#ad)"/>
+
+    <!-- footnote -->
+    <line x1="20" y1="1122" x2="1000" y2="1122" stroke="#DCE0E6" stroke-width="1"/>
+    <text x="20" y="1142" font-size="10.5" fill="#5E6874">Route A is never published automatically. Routes B and C are never sent automatically. Both wait for a human.</text>
+  </g>
+</svg>
+<figcaption>Solid lines are the scored path. Dashed blue is the bypass: a failed or untrustworthy
+score skips the routing rules entirely and goes straight to a human.</figcaption>
+</figure>
+
+<div class="pagebreak"></div>
+
+<h2>The decision logic</h2>
+
+<p>This is the single Code node, written out. <strong>Order matters — first match wins.</strong>
+Putting the whole rule set in one place is deliberate: it is the part a reviewer will ask about, and
+it should be possible to point at one node and read it top to bottom.</p>
+
+<table>
+  <tr>
+    <th style="width:5%">#</th>
+    <th style="width:36%">Condition</th>
+    <th style="width:15%">Route</th>
+    <th>Why it sits in this position</th>
+  </tr>
+  <tr>
+    <td><b>1</b></td>
+    <td>Model failed, or <code>confidence &lt; 0.6</code>, or not really feedback</td>
+    <td class="route-key rd">D — review</td>
+    <td>Checked first, so a broken score can never reach the routing rules below</td>
+  </tr>
+  <tr>
+    <td><b>2</b></td>
+    <td><code>polarity &lt; 0</code> <b>and</b> customer has a prior negative</td>
+    <td class="route-key rc">C — escalate</td>
+    <td>Above the severity test deliberately. This is the override — a mild second complaint still escalates</td>
+  </tr>
+  <tr>
+    <td><b>3</b></td>
+    <td><code>polarity &lt; 0</code> <b>and</b> <code>severity ≥ 4</code></td>
+    <td class="route-key rc">C — escalate</td>
+    <td>Severity on its own is enough, no history required</td>
+  </tr>
+  <tr>
+    <td><b>4</b></td>
+    <td><code>polarity &lt; 0</code></td>
+    <td class="route-key rb">B — private queue</td>
+    <td>First time, lower severity. Queued for the team; a draft is still generated</td>
+  </tr>
+  <tr>
+    <td><b>5</b></td>
+    <td><code>polarity &gt; 0</code></td>
+    <td class="route-key ra">A — ready to post</td>
+    <td>Stored for a human to read and copy out</td>
+  </tr>
+  <tr>
+    <td><b>6</b></td>
+    <td>Anything left — neutral</td>
+    <td class="route-key rd">D — review</td>
+    <td>Neutral is not positive, and route A feeds something a human may publish</td>
+  </tr>
+</table>
+
+<div class="callout avoid">
+  <h3>Two points worth challenging before we build</h3>
+  <p><strong>Rule 2 sits above rule 3.</strong> This is the brief's point 4 taken literally. Flip the
+  order and a mild repeat complaint gets severity-tested first, falls through to the ordinary queue,
+  and the third demo case stops looking different from the second. This ordering is the thing that
+  makes the repeat path visibly its own path.</p>
+  <p><strong>Rule 6 sends neutral to review rather than to the positive queue.</strong> "The car's
+  ready then?" is not a glowing review, and route A feeds something a human may publish. Deliberately
+  cautious — worth confirming that everyone agrees.</p>
+</div>
+
+<h2>Four design positions</h2>
+
+<h3>The routing decision lives in one Code node, not a tree of IF nodes</h3>
+<p>The rule is four-way with an override. Expressed as nested IF nodes that is four levels of
+branching smeared across the canvas — hard to read, hard to change, and hard to point at when
+someone asks where the logic is. One Code node emitting a <code>route</code> field, then a single
+Switch on that field, puts the whole decision in one place. For a graded project that legibility is
+worth a great deal.</p>
+
+<h3>A Basic LLM Chain with a structured output parser, not an AI Agent</h3>
+<p>This is one classification call, not a multi-step tool-using task. An Agent adds latency, cost and
+nondeterminism — and nondeterminism is the last thing wanted in a demo that must behave identically
+three times in front of an audience.</p>
+
+<h3>Two model calls, not one</h3>
+<p>Score first, draft second, and only on negatives. Nothing is spent drafting replies to happy
+customers; the scoring call stays tightly constrained while the drafting call is free to be warm and
+specific; and if drafting fails there is still a correct score and a correct route. One call doing
+both jobs couples two failures together.</p>
+
+<h3>Every threshold lives in one Config node</h3>
+<p>Severity cut-off, confidence floor, history lookback, the form's base URL — one Set node, none of
+them buried inside expressions. A reviewer can see every rule at a glance, and the migration to
+Oracle becomes a one-value change rather than a hunt.</p>
+
+<div class="pagebreak"></div>
+
+<h2>Building now for the move to Oracle Cloud</h2>
+
+<p>Building on n8n Cloud and later self-hosting on Docker is the right sequence — public HTTPS and
+zero setup while the deadline is live, then something owned outright that costs nothing. But
+<strong>four things do not survive an export</strong>, and each is cheap to design around now and
+painful to retrofit later.</p>
+
+<table>
+  <tr><th style="width:24%">What breaks</th><th>What to do about it now</th></tr>
+  <tr>
+    <td><b>Credentials do not export</b></td>
+    <td>Workflow JSON is exported with credential references stripped. Every credential — Anthropic,
+    the datastore, Gmail, Telegram — is re-created by hand on the Oracle instance. Keep a written
+    list as each one is added; reverse-engineering it later from red node badges is miserable.</td>
+  </tr>
+  <tr>
+    <td><b>Webhook and form URLs change</b></td>
+    <td>Cloud gives <code>&lt;name&gt;.app.n8n.cloud</code>; Oracle gives your own domain. Anything
+    hardcoding the cloud URL breaks silently on moving day. <b>Assemble the form link from a single
+    base-URL value in the Config node.</b> Because the domain is already owned, that value can point
+    at its permanent home from the start and never change at all.</td>
+  </tr>
+  <tr>
+    <td><b>Data held inside n8n</b></td>
+    <td>With Airtable or Supabase the move touches nothing — the workflows point at the same external
+    base either way. Using n8n's own Data Tables would mean migrating data by hand as well as
+    workflows. An argument for the external datastore already being considered.</td>
+  </tr>
+  <tr>
+    <td><b>Node version parity</b></td>
+    <td>Export from a newer n8n into an older self-hosted build and <code>typeVersion</code>
+    mismatches show up as parameters that quietly do not apply. Note the cloud version before
+    exporting and pin the Docker image to match, rather than taking <code>latest</code>.</td>
+  </tr>
+</table>
+
+<p class="sub">One more, unrelated to the export: Oracle's Always Free instances are <code>arm64</code>.
+The official n8n image is multi-arch so that is fine, but any sidecar container added alongside it
+needs an arm64 image too.</p>
+
+<h3>What the owned domain unlocks</h3>
+<p>A domain plus a free Oracle box means hosting web pages at no cost, which removes the main
+practical objection to <i>building</i> a dashboard rather than configuring one. It also means a
+customer-facing form on your own domain rather than an <code>app.n8n.cloud</code> link — a small
+thing that reads noticeably better in a demo.</p>
+
+<table>
+  <tr><th style="width:30%">Subdomain</th><th>Serves</th></tr>
+  <tr><td><code>n8n.&lt;domain&gt;</code></td><td>The n8n instance, once migrated</td></tr>
+  <tr><td><code>feedback.&lt;domain&gt;</code></td><td>The customer-facing feedback form</td></tr>
+  <tr><td><code>dashboard.&lt;domain&gt;</code></td><td>The management dashboard</td></tr>
+</table>
+
+<p>The trade-off is unchanged, though: a custom dashboard is still a second build. The domain removes
+its hosting cost and its deployment question, not its effort.</p>
+
+<h2>Cost</h2>
+
+<p><strong>This can be built for roughly five dollars.</strong> Cost should not decide any of the
+four open questions — the two gotchas below matter considerably more than the money does.</p>
+
+<h3>Running the model</h3>
+<p class="sub">Claude Opus 5 at $5 per million input tokens and $25 per million output. Token counts
+are estimates based on a scoring prompt carrying the rubric plus the customer's reply.</p>
+
+<table>
+  <tr><th>Call</th><th class="num">Input</th><th class="num">Output</th><th class="num">Per call</th></tr>
+  <tr><td>1 — Score the reply</td><td class="num">~600 tok</td><td class="num">~150 tok</td><td class="num">~$0.007</td></tr>
+  <tr><td>2 — Draft response <i>(negatives only)</i></td><td class="num">~700 tok</td><td class="num">~250 tok</td><td class="num">~$0.010</td></tr>
+  <tr><td><b>Positive item</b> — one call</td><td class="num">—</td><td class="num">—</td><td class="num"><b>~$0.007</b></td></tr>
+  <tr><td><b>Negative item</b> — both calls</td><td class="num">—</td><td class="num">—</td><td class="num"><b>~$0.017</b></td></tr>
+</table>
+
+<p>Round it to <strong>two cents per piece of feedback</strong>. Three hundred runs across the whole
+build — development, testing, re-runs, the live demo — comes to about <strong>$5</strong>. Anthropic's
+minimum credit purchase is $5, so that figure is both the floor and, realistically, the ceiling.</p>
+
+<h3>Everything else</h3>
+<table>
+  <tr><th style="width:30%">Component</th><th style="width:28%">Cost on this path</th><th>Notes</th></tr>
+  <tr><td><b>n8n Cloud</b> — build phase</td><td>Free 14 days, then €24/mo</td><td>Trial gives Pro features, 1,000 executions, no credit card</td></tr>
+  <tr><td><b>n8n on Oracle Cloud</b> — after</td><td><b>£0</b></td><td>Always Free ARM instance; Community Edition has unlimited executions</td></tr>
+  <tr><td><b>Airtable</b></td><td>Free</td><td>1,000 records per base, <b>one interface</b>, 5 editors</td></tr>
+  <tr><td><b>Supabase</b></td><td>Free</td><td>500 MB, 2 active projects</td></tr>
+  <tr><td><b>Gmail / Telegram</b></td><td>Free</td><td>Sending limits far above anything needed</td></tr>
+  <tr><td><b>Domain + dashboard hosting</b></td><td><b>£0</b></td><td>Already owned; served from the same Oracle box</td></tr>
+</table>
+
+<div class="callout warn avoid">
+  <h3>The real constraint is a deadline, not a bill</h3>
+  <p><strong>The n8n Cloud trial is 14 days.</strong> Three possible outcomes, and the group should
+  pick one on day one rather than discover it on day thirteen: finish and demo inside 14 days and pay
+  nothing; overrun and pay a single month of Starter at €24, which is trivial; or migrate to Oracle
+  earlier than planned and absorb that setup work mid-project.</p>
+</div>
+
+<div class="callout avoid">
+  <h3>Two gotchas that matter more than the price</h3>
+  <p><strong>Supabase free projects pause after a week of inactivity.</strong> Build in October, demo
+  in November, and the database is asleep. It does unpause — but discovering that five minutes before
+  presenting is a bad afternoon. If Supabase is chosen, either someone touches the project weekly or
+  the demo runbook opens with a wake-up step.</p>
+  <p><strong>Airtable's free plan allows exactly one interface.</strong> An interface holds many
+  pages, so all six dashboard requirements still fit inside it — but there is no room for a second
+  interface alongside, for a different audience or as a spare.</p>
+</div>
+
+<h2>The demo, and why it needs a seeder</h2>
+
+<p>The brief is explicit: show a positive case, a first-time negative case, and a repeat-negative
+case, so all three paths can be seen behaving differently rather than described as doing so.</p>
+
+<p><strong>There is an ordering constraint hiding in that requirement.</strong> The repeat case only
+behaves as a repeat if that customer already has a negative on file. So the demo cannot simply fire
+three messages — the repeat customer's <i>first</i> complaint has to have been processed before their
+second arrives. Clicking through that live is fragile and slow.</p>
+
+<p>Hence a fourth workflow: a <strong>demo seeder</strong> on a manual trigger that fires every
+canonical case in the correct order and leaves the dashboard showing all four routes populated. It
+makes the demo a single click, repeatable, and identical every time it runs.</p>
+
+<h3>The four workflows</h3>
+<table>
+  <tr><th style="width:8%">#</th><th style="width:34%">Workflow</th><th>Purpose</th></tr>
+  <tr><td><b>1</b></td><td>Visit Complete → Request</td><td>Webhook standing in for the shop's job management system</td></tr>
+  <tr><td><b>2</b></td><td>Reply → Score → Route</td><td>The core pipeline — scoring, history, routing, drafting, alerting</td></tr>
+  <tr><td><b>3</b></td><td>Manager actions</td><td>Mark an alert acted on, a draft sent, a review posted <i>(may live in the dashboard instead)</i></td></tr>
+  <tr><td><b>4</b></td><td>Demo seeder</td><td>One click, every case, correct order</td></tr>
+</table>
+
+<h2>What is not yet written</h2>
+<p>The data model, the node-by-node build order, the dashboard specification and the verification
+steps all follow once the four open questions on page 2 are settled. Those four are the blockers;
+everything else in this document is stable enough to build against.</p>
+
+<p class="footer-note">Prices checked 22 September 2026 against n8n, Airtable and Supabase published
+pricing, and Anthropic's published API rates. Figures for model usage are estimates based on assumed
+prompt sizes, not measured runs.</p>

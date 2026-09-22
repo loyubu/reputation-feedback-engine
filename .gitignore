@@ -1,0 +1,15 @@
+# document build
+docs-src/node_modules/
+docs-src/package-lock.json
+
+# QA scratch renders
+*-qa.pdf
+pg-*.png
+sl-*.png
+
+# OS
+Thumbs.db
+desktop.ini
+
+# course material - kept locally, deliberately not published
+Capstone Project Information.txt

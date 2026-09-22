@@ -1,0 +1,7 @@
+{
+  "name": "feedback-engine-docs",
+  "private": true,
+  "description": "Sources for the design review deliverables. Not the capstone system itself.",
+  "scripts": { "deck": "node deck.js" },
+  "dependencies": { "pptxgenjs": "^4.0.1" }
+}
