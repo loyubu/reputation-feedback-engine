@@ -13,3 +13,8 @@ desktop.ini
 
 # course material - kept locally, deliberately not published
 Capstone Project Information.txt
+
+# secrets - never commit; .env.example is the shareable template
+.env
+.env.*
+!.env.example
